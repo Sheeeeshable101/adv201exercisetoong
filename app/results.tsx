@@ -4,27 +4,41 @@ import { Link, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 
+const HIGH_SCORE_KEYS = {
+  main: "mainQuizHighScore",
+  preview: "previewQuizHighScore",
+};
+
 export default function ResultsScreen() {
-  const { score, total } = useLocalSearchParams<{
+  const { score, total, quizType } = useLocalSearchParams<{
     score: string;
     total: string;
+    quizType?: string;
   }>();
   const [highScore, setHighScore] = useState(0);
+  const [isNewHighScore, setIsNewHighScore] = useState(false);
+
+  const isPreviewQuiz = quizType === "preview";
+  const storageKey = isPreviewQuiz
+    ? HIGH_SCORE_KEYS.preview
+    : HIGH_SCORE_KEYS.main;
 
   useEffect(() => {
     const loadHighScore = async () => {
       try {
         const currentScore = parseInt(score || "0", 10);
         const storedHighScore = parseInt(
-          (await AsyncStorage.getItem("highScore")) || "0",
+          (await AsyncStorage.getItem(storageKey)) || "0",
           10,
         );
 
         if (currentScore > storedHighScore) {
           setHighScore(currentScore);
-          await AsyncStorage.setItem("highScore", currentScore.toString());
+          setIsNewHighScore(true);
+          await AsyncStorage.setItem(storageKey, currentScore.toString());
         } else {
           setHighScore(storedHighScore);
+          setIsNewHighScore(false);
         }
       } catch (error) {
         console.error("Error loading high score:", error);
@@ -32,7 +46,7 @@ export default function ResultsScreen() {
     };
 
     loadHighScore();
-  }, [score]);
+  }, [score, storageKey]);
 
   const currentScore = parseInt(score || "0", 10);
   const totalQuestions = parseInt(total || "0", 10);
@@ -40,17 +54,20 @@ export default function ResultsScreen() {
     totalQuestions > 0 ? Math.round((currentScore / totalQuestions) * 100) : 0;
 
   const getMessage = () => {
+    if (isNewHighScore) return "New High Score!";
     if (percentage >= 80) return "Excellent!";
     if (percentage >= 60) return "Good job!";
     if (percentage >= 40) return "Not bad!";
     return "Keep practicing!";
   };
 
+  const quizTitle = isPreviewQuiz ? "Preview Quiz" : "Quiz";
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
         <ThemedText type="title" style={styles.title}>
-          Quiz Complete!
+          {quizTitle} Complete!
         </ThemedText>
 
         <ThemedText type="title" style={styles.message}>
@@ -72,7 +89,7 @@ export default function ResultsScreen() {
 
           <View style={styles.scoreCard}>
             <ThemedText type="default" style={styles.scoreLabel}>
-              Highest Score
+              {isPreviewQuiz ? "Preview" : "Main"} Best
             </ThemedText>
             <ThemedText type="title" style={styles.highScoreValue}>
               {highScore} / {totalQuestions}
@@ -87,13 +104,23 @@ export default function ResultsScreen() {
         </View>
 
         <View style={styles.buttonColumn}>
-          <Link href="/quiz" asChild>
-            <TouchableOpacity style={styles.button}>
-              <ThemedText type="defaultSemiBold" style={styles.buttonText}>
-                Try Again
-              </ThemedText>
-            </TouchableOpacity>
-          </Link>
+          {isPreviewQuiz ? (
+            <Link href="/preview-quiz" asChild>
+              <TouchableOpacity style={styles.button}>
+                <ThemedText type="defaultSemiBold" style={styles.buttonText}>
+                  Try Again
+                </ThemedText>
+              </TouchableOpacity>
+            </Link>
+          ) : (
+            <Link href="/quiz" asChild>
+              <TouchableOpacity style={styles.button}>
+                <ThemedText type="defaultSemiBold" style={styles.buttonText}>
+                  Try Again
+                </ThemedText>
+              </TouchableOpacity>
+            </Link>
+          )}
 
           <Link href="/" asChild>
             <TouchableOpacity style={styles.homeButton}>

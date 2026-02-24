@@ -1,20 +1,34 @@
 import { ThemedText } from "@/components/themed-text";
-import { questions } from "@/data/questions";
+import { useQuizData } from "@/hooks/useQuizData";
 import { Href, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 type AnswerState = {
   [key: number]: string | string[];
 };
 
-export default function QuizScreen() {
+export default function PreviewQuizScreen() {
   const router = useRouter();
+  const { settings } = useQuizData();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerState>({});
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const questions = settings.questions;
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length;
+
+  useEffect(() => {
+    setTimeRemaining(settings.timerMinutes * 60);
+  }, [settings.timerMinutes]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const handleSubmit = useCallback(() => {
     const calculateScore = () => {
@@ -38,10 +52,39 @@ export default function QuizScreen() {
     const finalScore = calculateScore();
 
     setTimeout(() => {
-      const href: Href = `/results?score=${finalScore}&total=${totalQuestions}&quizType=main`;
+      const href: Href = `/results?score=${finalScore}&total=${totalQuestions}&quizType=preview`;
       router.replace(href);
     }, 500);
-  }, [router, totalQuestions, answers]);
+  }, [router, totalQuestions, questions, answers]);
+
+  useEffect(() => {
+    if (settings.timerMinutes <= 0) {
+      return;
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    timerRef.current = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          handleSubmit();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [settings.timerMinutes, handleSubmit]);
 
   const handleAnswerSelect = (choiceKey: string) => {
     if (currentQuestion.type === "checkbox") {
@@ -75,8 +118,40 @@ export default function QuizScreen() {
     }
   };
 
+  if (questions.length === 0) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <ThemedText type="title" style={styles.emptyText}>
+            No Questions Available
+          </ThemedText>
+          <ThemedText type="default" style={styles.emptySubtext}>
+            Please add questions in Quiz Settings
+          </ThemedText>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
+      {settings.timerMinutes > 0 && (
+        <View style={styles.timerContainer}>
+          <ThemedText type="default" style={styles.timerLabel}>
+            Time Remaining
+          </ThemedText>
+          <ThemedText
+            type="title"
+            style={[
+              styles.timerText,
+              timeRemaining < 60 && styles.timerWarning,
+            ]}
+          >
+            {formatTime(timeRemaining)}
+          </ThemedText>
+        </View>
+      )}
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.progressContainer}>
           <ThemedText type="default" style={styles.progressText}>
@@ -165,6 +240,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#1D3D47",
   },
+  timerContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: "#2D5A6B",
+    borderBottomWidth: 1,
+    borderBottomColor: "#3D7A8B",
+  },
+  timerLabel: {
+    color: "#A1CEDC",
+    fontSize: 14,
+  },
+  timerText: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  timerWarning: {
+    color: "#FF6B6B",
+  },
   scrollContent: {
     padding: 20,
   },
@@ -240,5 +337,18 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     backgroundColor: "#4CAF50",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  emptyText: {
+    color: "#FFFFFF",
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    color: "#A1CEDC",
   },
 });
